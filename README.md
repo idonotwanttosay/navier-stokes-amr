@@ -1,4 +1,7 @@
-g++-14 -fopenmp poisson_solver.cpp -o poisson_solver \\
+g++-14 -fopenmp *.cpp -o navier_stokes_amr   
+
+
 export OMP_NUM_THREADS=4                                  
-./navier_stokes_amr > output.txt \\
-python -u "/Users/liuyuen/project/plot_flow.py"    
+./navier_stokes_amr > output.txt 
+
+python -u "/Users/liuyuen/project/plot_flow.py"           
