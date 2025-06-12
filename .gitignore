@@ -1,0 +1,15 @@
+# Compiled binaries
+navier_stokes_amr
+*.o
+*.out
+
+# Output files
+output_*.csv
+flow_animation.mp4
+output.txt
+output_new.txt
+
+# Temporary files
+*.swp
+*.swo
+*.bak
