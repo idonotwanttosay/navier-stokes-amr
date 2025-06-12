@@ -42,6 +42,9 @@ int main(){
 
         solve_MHD(amr,flows,dt,nu,0,0.0);
 
+        // Additional damping to ensure divergence errors do not accumulate
+        damp_divergence(flows[0], dt);
+
         if(step%output_every==0){
             std::cout << "step "<< std::setw(4) << step
                       << " dt="<<dt<<"\n";
