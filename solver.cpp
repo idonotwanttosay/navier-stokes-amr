@@ -210,6 +210,16 @@ std::pair<double, double> compute_divergence_errors(const FlowField& flow) {
     return {max_divB, L1_divB};
 }
 
+// Apply simple exponential damping to psi to mitigate accumulated divergence
+void damp_divergence(FlowField& flow, double dt) {
+    #pragma omp parallel for collapse(2)
+    for (int i = 0; i < flow.psi.nx; ++i) {
+        for (int j = 0; j < flow.psi.ny; ++j) {
+            flow.psi.data[i][j] *= std::exp(-CR * CH * dt);
+        }
+    }
+}
+
 // Main improved MHD solver function
 static FlowField refine_flow(const FlowField& coarse,int start_x,int start_y,int fine_nx,int fine_ny){
     double fine_dx = coarse.rho.dx/2.0;
@@ -519,6 +529,9 @@ static void update_level(FlowField& flow,double dt,double nu){
         flow.psi.data[i][0] = flow.psi.data[i][grid.ny-2];
         flow.psi.data[i][grid.ny-1] = flow.psi.data[i][1];
     }
+
+    // Reduce any accumulated divergence through damping of psi
+    damp_divergence(flow, dt);
 }
 
 void solve_MHD(AMRGrid& amr, std::vector<FlowField>& flows, double dt, double nu, int, double){
