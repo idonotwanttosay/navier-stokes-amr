@@ -9,3 +9,4 @@ python3 plot_density.py
 python3 analysis_spectrum.py
 python3 analysis_divergence.py
 python3 analysis_conservation.py
+python3 analysis_summary.py
