@@ -17,6 +17,12 @@ static inline double laplacian(const Grid& g, int i, int j) {
          + (g.data[i][j+1] - 2*g.data[i][j] + g.data[i][j-1])/(g.dy*g.dy);
 }
 
+// Minmod slope limiter
+static inline double minmod(double a, double b){
+    if(a*b <= 0.0) return 0.0;
+    return (std::abs(a) < std::abs(b)) ? a : b;
+}
+
 // Compute fast magnetosonic speed (for CFL condition)
 static double compute_fast_speed(double rho, double p, double Bx, double By) {
     double cs2 = gamma_gas * p / rho;  // Sound speed squared
@@ -243,6 +249,65 @@ static void update_level(FlowField& flow,double dt,double nu){
     auto bx_new = flow.bx.data;
     auto by_new = flow.by.data;
     auto psi_new = flow.psi.data;
+
+    // Pre-compute limited slopes for MUSCL reconstruction
+    auto srho_x = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto su_x   = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto sv_x   = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto sp_x   = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto sbx_x  = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto sby_x  = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto spsi_x = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+
+    auto srho_y = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto su_y   = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto sv_y   = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto sp_y   = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto sbx_y  = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto sby_y  = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+    auto spsi_y = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
+
+    // Slopes in X direction
+    #pragma omp parallel for collapse(2)
+    for(int i=1;i<grid.nx-1;++i){
+        for(int j=0;j<grid.ny;++j){
+            srho_x[i][j] = minmod(flow.rho.data[i][j]-flow.rho.data[i-1][j],
+                                  flow.rho.data[i+1][j]-flow.rho.data[i][j]);
+            su_x[i][j]   = minmod(flow.u.data[i][j]-flow.u.data[i-1][j],
+                                  flow.u.data[i+1][j]-flow.u.data[i][j]);
+            sv_x[i][j]   = minmod(flow.v.data[i][j]-flow.v.data[i-1][j],
+                                  flow.v.data[i+1][j]-flow.v.data[i][j]);
+            sp_x[i][j]   = minmod(flow.p.data[i][j]-flow.p.data[i-1][j],
+                                  flow.p.data[i+1][j]-flow.p.data[i][j]);
+            sbx_x[i][j]  = minmod(flow.bx.data[i][j]-flow.bx.data[i-1][j],
+                                  flow.bx.data[i+1][j]-flow.bx.data[i][j]);
+            sby_x[i][j]  = minmod(flow.by.data[i][j]-flow.by.data[i-1][j],
+                                  flow.by.data[i+1][j]-flow.by.data[i][j]);
+            spsi_x[i][j] = minmod(flow.psi.data[i][j]-flow.psi.data[i-1][j],
+                                  flow.psi.data[i+1][j]-flow.psi.data[i][j]);
+        }
+    }
+
+    // Slopes in Y direction
+    #pragma omp parallel for collapse(2)
+    for(int i=0;i<grid.nx;++i){
+        for(int j=1;j<grid.ny-1;++j){
+            srho_y[i][j] = minmod(flow.rho.data[i][j]-flow.rho.data[i][j-1],
+                                  flow.rho.data[i][j+1]-flow.rho.data[i][j]);
+            su_y[i][j]   = minmod(flow.u.data[i][j]-flow.u.data[i][j-1],
+                                  flow.u.data[i][j+1]-flow.u.data[i][j]);
+            sv_y[i][j]   = minmod(flow.v.data[i][j]-flow.v.data[i][j-1],
+                                  flow.v.data[i][j+1]-flow.v.data[i][j]);
+            sp_y[i][j]   = minmod(flow.p.data[i][j]-flow.p.data[i][j-1],
+                                  flow.p.data[i][j+1]-flow.p.data[i][j]);
+            sbx_y[i][j]  = minmod(flow.bx.data[i][j]-flow.bx.data[i][j-1],
+                                  flow.bx.data[i][j+1]-flow.bx.data[i][j]);
+            sby_y[i][j]  = minmod(flow.by.data[i][j]-flow.by.data[i][j-1],
+                                  flow.by.data[i][j+1]-flow.by.data[i][j]);
+            spsi_y[i][j] = minmod(flow.psi.data[i][j]-flow.psi.data[i][j-1],
+                                  flow.psi.data[i][j+1]-flow.psi.data[i][j]);
+        }
+    }
     
     // First compute momentum (for HLL solver)
     #pragma omp parallel for collapse(2)
@@ -266,34 +331,82 @@ static void update_level(FlowField& flow,double dt,double nu){
             double By = flow.by.data[i][j];
             double psi = flow.psi.data[i][j];
             
-            // X direction fluxes
+            // X direction fluxes with MUSCL reconstruction
             HLLFlux flux_xp = compute_hll_flux_x(
-                rho, u, v, p, Bx, By, psi,
-                flow.rho.data[i+1][j], flow.u.data[i+1][j], flow.v.data[i+1][j],
-                flow.p.data[i+1][j], flow.bx.data[i+1][j], flow.by.data[i+1][j],
-                flow.psi.data[i+1][j]
+               // left state at i+1/2
+                rho + 0.5*srho_x[i][j],
+                u   + 0.5*su_x[i][j],
+                v   + 0.5*sv_x[i][j],
+                p   + 0.5*sp_x[i][j],
+                Bx  + 0.5*sbx_x[i][j],
+                By  + 0.5*sby_x[i][j],
+                psi + 0.5*spsi_x[i][j],
+                // right state at i+1/2
+                flow.rho.data[i+1][j] - 0.5*srho_x[i+1][j],
+                flow.u.data[i+1][j]   - 0.5*su_x[i+1][j],
+                flow.v.data[i+1][j]   - 0.5*sv_x[i+1][j],
+                flow.p.data[i+1][j]   - 0.5*sp_x[i+1][j],
+                flow.bx.data[i+1][j]  - 0.5*sbx_x[i+1][j],
+                flow.by.data[i+1][j]  - 0.5*sby_x[i+1][j],
+                flow.psi.data[i+1][j] - 0.5*spsi_x[i+1][j]
             );
             
             HLLFlux flux_xm = compute_hll_flux_x(
-                flow.rho.data[i-1][j], flow.u.data[i-1][j], flow.v.data[i-1][j],
-                flow.p.data[i-1][j], flow.bx.data[i-1][j], flow.by.data[i-1][j],
-                flow.psi.data[i-1][j],
-                rho, u, v, p, Bx, By, psi
+                // left state at i-1/2
+                flow.rho.data[i-1][j] + 0.5*srho_x[i-1][j],
+                flow.u.data[i-1][j]   + 0.5*su_x[i-1][j],
+                flow.v.data[i-1][j]   + 0.5*sv_x[i-1][j],
+                flow.p.data[i-1][j]   + 0.5*sp_x[i-1][j],
+                flow.bx.data[i-1][j]  + 0.5*sbx_x[i-1][j],
+                flow.by.data[i-1][j]  + 0.5*sby_x[i-1][j],
+                flow.psi.data[i-1][j] + 0.5*spsi_x[i-1][j],
+                // right state at i-1/2
+                rho - 0.5*srho_x[i][j],
+                u   - 0.5*su_x[i][j],
+                v   - 0.5*sv_x[i][j],
+                p   - 0.5*sp_x[i][j],
+                Bx  - 0.5*sbx_x[i][j],
+                By  - 0.5*sby_x[i][j],
+                psi - 0.5*spsi_x[i][j]
             );
             
-            // Y direction fluxes
+            // Y direction fluxes with MUSCL reconstruction
             HLLFlux flux_yp = compute_hll_flux_y(
-                rho, u, v, p, Bx, By, psi,
-                flow.rho.data[i][j+1], flow.u.data[i][j+1], flow.v.data[i][j+1],
-                flow.p.data[i][j+1], flow.bx.data[i][j+1], flow.by.data[i][j+1],
-                flow.psi.data[i][j+1]
+                // bottom state at j+1/2
+                rho + 0.5*srho_y[i][j],
+                u   + 0.5*su_y[i][j],
+                v   + 0.5*sv_y[i][j],
+                p   + 0.5*sp_y[i][j],
+                Bx  + 0.5*sbx_y[i][j],
+                By  + 0.5*sby_y[i][j],
+                psi + 0.5*spsi_y[i][j],
+                // top state at j+1/2
+                flow.rho.data[i][j+1] - 0.5*srho_y[i][j+1],
+                flow.u.data[i][j+1]   - 0.5*su_y[i][j+1],
+                flow.v.data[i][j+1]   - 0.5*sv_y[i][j+1],
+                flow.p.data[i][j+1]   - 0.5*sp_y[i][j+1],
+                flow.bx.data[i][j+1]  - 0.5*sbx_y[i][j+1],
+                flow.by.data[i][j+1]  - 0.5*sby_y[i][j+1],
+                flow.psi.data[i][j+1] - 0.5*spsi_y[i][j+1]
             );
             
             HLLFlux flux_ym = compute_hll_flux_y(
-                flow.rho.data[i][j-1], flow.u.data[i][j-1], flow.v.data[i][j-1],
-                flow.p.data[i][j-1], flow.bx.data[i][j-1], flow.by.data[i][j-1],
-                flow.psi.data[i][j-1],
-                rho, u, v, p, Bx, By, psi
+                // bottom state at j-1/2
+                flow.rho.data[i][j-1] + 0.5*srho_y[i][j-1],
+                flow.u.data[i][j-1]   + 0.5*su_y[i][j-1],
+                flow.v.data[i][j-1]   + 0.5*sv_y[i][j-1],
+                flow.p.data[i][j-1]   + 0.5*sp_y[i][j-1],
+                flow.bx.data[i][j-1]  + 0.5*sbx_y[i][j-1],
+                flow.by.data[i][j-1]  + 0.5*sby_y[i][j-1],
+                flow.psi.data[i][j-1] + 0.5*spsi_y[i][j-1],
+                // top state at j-1/2
+                rho - 0.5*srho_y[i][j],
+                u   - 0.5*su_y[i][j],
+                v   - 0.5*sv_y[i][j],
+                p   - 0.5*sp_y[i][j],
+                Bx  - 0.5*sbx_y[i][j],
+                By  - 0.5*sby_y[i][j],
+                psi - 0.5*spsi_y[i][j]
             );
             
             // Update conserved variables
