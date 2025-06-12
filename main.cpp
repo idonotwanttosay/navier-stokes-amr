@@ -32,6 +32,7 @@ int main(){
     std::vector<FlowField> flows;
     flows.emplace_back(nx,ny,dx,dy);
     initialize_MHD_disk(flows[0]); // deterministic seed default
+    add_divergence_error(flows[0], 0.1);
 
 
     auto t0=std::chrono::high_resolution_clock::now();
