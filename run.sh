@@ -8,4 +8,4 @@ export OMP_NUM_THREADS=${OMP_NUM_THREADS:-4}
 python3 plot_density.py
 python3 analysis_spectrum.py
 python3 analysis_divergence.py
-python3 analysis_performance.py
+python3 analysis_conservation.py
