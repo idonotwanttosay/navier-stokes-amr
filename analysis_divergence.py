@@ -1,35 +1,29 @@
-"""Compute L2 norm of magnetic field divergence over time.
+"""Compute L2 norm of magnetic field divergence over time."""
 
-Expects out_bx_<step>.csv & out_by_<step>.csv inside Result/.
-Outputs PNG.
-"""
+import matplotlib.pyplot as plt
+import numpy as np
 
-import numpy as np, pandas as pd, matplotlib.pyplot as plt, re, os, glob
+import postprocess as pp
 
-files = glob.glob("Result/out_bx_*.csv")
-if not files:
+steps = pp.available_steps("bx")
+if not steps:
     raise RuntimeError("No B field output found. Did you recompile & rerun the solver?")
 
-steps = sorted(int(re.findall(r"_bx_(\d+).csv",f)[0]) for f in files)
+xs, ys = pp.read_grid("bx")
+dx = xs[1] - xs[0]
+dy = ys[1] - ys[0]
 
-def load(step,prefix):
-    d = pd.read_csv(f"Result/out_{prefix}_{step}.csv",header=None)
-    return d.values[:,2]
+def load(step: int, prefix: str) -> np.ndarray:
+    return pp.load_field(prefix, step, xs, ys)
 
-def grid_shape():
-    df = pd.read_csv(files[0],header=None)
-    xs = np.unique(df[0]); ys = np.unique(df[1])
-    return len(xs), len(ys), xs, ys
-
-nx, ny, xs, ys = grid_shape()
-dx = xs[1]-xs[0]; dy = ys[1]-ys[0]
-
-l2=[]
+l2 = []
 for s in steps:
-    bx = load(s,"bx").reshape(nx,ny).T
-    by = load(s,"by").reshape(nx,ny).T
-    div = (np.roll(bx,-1,1)-np.roll(bx,1,1))/(2*dx) + (np.roll(by,-1,0)-np.roll(by,1,0))/(2*dy)
-    l2.append(np.sqrt(np.mean(div**2)))
+    bx = load(s, "bx")
+    by = load(s, "by")
+    div = (np.roll(bx, -1, 1) - np.roll(bx, 1, 1)) / (2 * dx) + (
+        np.roll(by, -1, 0) - np.roll(by, 1, 0)
+    ) / (2 * dy)
+    l2.append(np.sqrt(np.mean(div ** 2)))
 
 plt.semilogy(steps,l2,'o-')
 plt.xlabel("step"); plt.ylabel("L2(∇·B)")

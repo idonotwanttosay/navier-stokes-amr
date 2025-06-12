@@ -1,14 +1,15 @@
-import pandas as pd, numpy as np, matplotlib.pyplot as plt, glob, re, os
-files = glob.glob("Result/out_rho_*.csv")
-steps = sorted(int(re.findall(r"_rho_(\d+).csv",f)[0]) for f in files)
+import matplotlib.pyplot as plt
+import numpy as np
+
+import postprocess as pp
+
+steps = pp.available_steps("rho")
 if not steps:
     raise SystemExit("no rho")
-xs = np.unique(pd.read_csv(files[0],header=None)[0])
-ys = np.unique(pd.read_csv(files[0],header=None)[1])
-nx,ny = len(xs), len(ys)
+xs, ys = pp.read_grid("rho")
+nx, ny = len(xs), len(ys)
 for s in steps:
-    df = pd.read_csv(f"Result/out_rho_{s}.csv", header=None)
-    rho = df[2].values.reshape(nx, ny).T
+    rho = pp.load_field("rho", s, xs, ys)
     X, Y = np.meshgrid(xs, ys)
     plt.figure(figsize=(6,5))
     plt.contourf(X, Y, rho, levels=40, cmap='viridis')

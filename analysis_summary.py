@@ -1,26 +1,20 @@
-import numpy as np
-import pandas as pd
-import glob
-import re
 import matplotlib.pyplot as plt
+import numpy as np
 
-# discover available time steps
-rho_files = glob.glob("Result/out_rho_*.csv")
-if not rho_files:
+import postprocess as pp
+
+steps = pp.available_steps("rho")
+if not steps:
     raise SystemExit("No output found")
-steps = sorted(int(re.findall(r"_rho_(\d+)", f)[0]) for f in rho_files)
 
-# infer grid from first file
-sample = pd.read_csv(rho_files[0], header=None)
-xs = np.unique(sample[0]); ys = np.unique(sample[1])
+xs, ys = pp.read_grid("rho")
 DX = xs[1] - xs[0]
 DY = ys[1] - ys[0]
 NX, NY = len(xs), len(ys)
 
 
-def load(step, prefix):
-    df = pd.read_csv(f"Result/out_{prefix}_{step}.csv", header=None)
-    return df[2].values.reshape(NX, NY).T
+def load(step: int, prefix: str) -> np.ndarray:
+    return pp.load_field(prefix, step, xs, ys)
 
 mass = []
 energy = []

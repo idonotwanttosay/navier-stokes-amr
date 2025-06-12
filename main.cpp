@@ -48,7 +48,8 @@ int main(){
         if(step%output_every==0){
             std::cout << "step "<< std::setw(4) << step
                       << " dt="<<dt<<"\n";
-            save_flow_MHD(flows[0],out_dir,step);
+            save_flow_MHD(flows[0], out_dir, step);
+            save_amr_grid(amr, out_dir, step);
         }
     }
     auto t1=std::chrono::high_resolution_clock::now();
