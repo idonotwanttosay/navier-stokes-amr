@@ -6,6 +6,7 @@
 #include <chrono>
 #include <iostream>
 #include <iomanip>
+#include <vector>
 
 static std::string prepare_output_dir(){
     namespace fs = std::filesystem;
@@ -28,8 +29,10 @@ int main(){
     std::string out_dir = prepare_output_dir();
 
     AMRGrid amr(nx,ny,Lx,Ly,1);
-    FlowField flow(nx,ny,dx,dy);
-    initialize_MHD_disk(flow); // deterministic seed default
+    std::vector<FlowField> flows;
+    flows.emplace_back(nx,ny,dx,dy);
+    initialize_MHD_disk(flows[0]); // deterministic seed default
+
 
     auto t0=std::chrono::high_resolution_clock::now();
     for(int step=0; step<=max_steps; ++step){
@@ -37,18 +40,18 @@ int main(){
 #pragma omp parallel for reduction(max:max_speed)
         for(int i=0;i<nx;++i)
             for(int j=0;j<ny;++j){
-                double cs=std::sqrt(1.4*flow.p.data[i][j]/flow.rho.data[i][j]);
-                double spd=std::abs(flow.u.data[i][j])+std::abs(flow.v.data[i][j])+cs;
+                double cs=std::sqrt(1.4*flows[0].p.data[i][j]/flows[0].rho.data[i][j]);
+                double spd=std::abs(flows[0].u.data[i][j])+std::abs(flows[0].v.data[i][j])+cs;
                 max_speed=std::max(max_speed,spd);
             }
         double dt=0.4*std::min(dx,dy)/(max_speed+1e-12);
 
-        solve_MHD(amr,flow,dt,nu,0,0.0);
+        solve_MHD(amr,flows,dt,nu,0,0.0);
 
         if(step%output_every==0){
             std::cout << "step "<< std::setw(4) << step
                       << " dt="<<dt<<"\n";
-            save_flow_MHD(flow,out_dir,step);
+            save_flow_MHD(flows[0],out_dir,step);
         }
     }
     auto t1=std::chrono::high_resolution_clock::now();
