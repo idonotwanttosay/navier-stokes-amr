@@ -404,24 +404,28 @@ static void update_level(FlowField& flow,double dt,double nu){
 }
 
 void solve_MHD(AMRGrid& amr, std::vector<FlowField>& flows, double dt, double nu, int, double){
-    if(amr.levels.size()==flows.size()){
+    // allow a single refinement on the base grid if needed
+    if(amr.levels.size() == flows.size()){
         Grid& g = flows[0].rho;
-        for(int i=1;i<g.nx-1;++i){
-            for(int j=1;j<g.ny-1;++j){
-                if(amr.needs_refinement(g,i,j,0.5)){
-                    int fnx=g.nx/2;
-                    int fny=g.ny/2;
-                    int sx=std::max(0,i-fnx/4);
-                    int sy=std::max(0,j-fny/4);
-                    amr.refine(0,sx,sy,fnx,fny);
-                    flows.push_back(refine_flow(flows[0],sx,sy,fnx,fny));
-                    i=g.nx; break;
+        for(int i = 1; i < g.nx-1; ++i){
+            for(int j = 1; j < g.ny-1; ++j){
+                if(amr.needs_refinement(g, i, j, 0.5)){
+                    int fnx = g.nx/2;
+                    int fny = g.ny/2;
+                    int sx  = std::max(0, i - fnx/4);
+                    int sy  = std::max(0, j - fny/4);
+                    amr.refine(0, sx, sy, fnx, fny);
+                    flows.push_back(refine_flow(flows[0], sx, sy, fnx, fny));
+                    i = g.nx; // exit loops
+                    break;
                 }
             }
         }
     }
 
 
-for(auto& f: flows){
-        update_level(f,dt,nu);
+    // update every level separately (no prolongation/restriction for simplicity)
+    for(auto& f : flows){
+        update_level(f, dt, nu);
     }
+}
