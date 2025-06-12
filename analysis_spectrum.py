@@ -1,25 +1,20 @@
-"""Compute kinetic energy spectra eliminating mean flow and normalising.
+"""Compute kinetic energy spectrum and save a PNG."""
 
-Generates Result/energy_spectrum.png
-"""
+import matplotlib.pyplot as plt
+import numpy as np
 
-import numpy as np, pandas as pd, matplotlib.pyplot as plt, glob, re, os
+import postprocess as pp
 
-u_files = glob.glob("Result/out_u_*.csv")
-if not u_files:
+steps = pp.available_steps("u")
+if not steps:
     raise SystemExit("No velocity output found.")
 
-steps = sorted(int(re.findall(r"_u_(\d+).csv",f)[0]) for f in u_files)
+xs, ys = pp.read_grid("u")
+nx = len(xs)
+ny = len(ys)
 
-def grid():
-    df = pd.read_csv(u_files[0],header=None)
-    xs=np.unique(df[0]); ys=np.unique(df[1])
-    return len(xs), len(ys), xs, ys
-nx,ny,xs,ys = grid()
-
-def load(step,comp):
-    df = pd.read_csv(f"Result/out_{comp}_{step}.csv",header=None)
-    return df.values[:,2].reshape(nx,ny).T
+def load(step: int, comp: str) -> np.ndarray:
+    return pp.load_field(comp, step, xs, ys)
 
 def spectrum(u,v):
     u = u - u.mean(); v = v - v.mean()
