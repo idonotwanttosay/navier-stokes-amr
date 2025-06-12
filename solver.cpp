@@ -160,7 +160,7 @@ HLLFlux compute_hll_flux_y(double rhoL, double uL, double vL, double pL, double 
 }
 
 // Compute dynamic CFL timestep
-double compute_cfl_timestep(const FlowField& flow, double cfl_number = 0.4) {
+double compute_cfl_timestep(const FlowField& flow, double cfl_number) {
     double dt_min = 1e10;
     const Grid& grid = flow.rho;
     
