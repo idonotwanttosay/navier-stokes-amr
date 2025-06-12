@@ -33,5 +33,6 @@ public:
 struct FlowField {
     Grid rho,u,v,p,e;
     Grid bx,by,psi;
-    FlowField(int nx,int ny,double dx,double dy);
+    FlowField(int nx,int ny,double dx,double dy,double x0=0.0,double y0=0.0);
+    FlowField(const Grid& g);
 };
