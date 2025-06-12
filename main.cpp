@@ -45,9 +45,14 @@ int main(){
         // Additional damping to ensure divergence errors do not accumulate
         damp_divergence(flows[0], dt);
 
+        // Monitor divergence errors of the magnetic field
+        auto [max_divB, L1_divB] = compute_divergence_errors(flows[0]);
+
         if(step%output_every==0){
             std::cout << "step "<< std::setw(4) << step
-                      << " dt="<<dt<<"\n";
+                      << " dt="<<dt
+                      << " max|divB|="<<max_divB
+                      << " L1(divB)="<<L1_divB<<"\n";
             save_flow_MHD(flows[0], out_dir, step);
             save_amr_grid(amr, out_dir, step);
         }
