@@ -535,22 +535,26 @@ static void update_level(FlowField& flow,double dt,double nu){
 }
 
 void solve_MHD(AMRGrid& amr, std::vector<FlowField>& flows, double dt, double nu, int, double){
-    // allow a single refinement on the base grid if needed
+    // check each AMR level for possible refinement
     if(amr.levels.size() == flows.size()){
-        Grid& g = flows[0].rho;
-        for(int i = 1; i < g.nx-1; ++i){
-            for(int j = 1; j < g.ny-1; ++j){
-                if(amr.needs_refinement(g, i, j, 0.5)){
-                    int fnx = g.nx/2;
-                    int fny = g.ny/2;
-                    int sx  = std::max(0, i - fnx/4);
-                    int sy  = std::max(0, j - fny/4);
-                    amr.refine(0, sx, sy, fnx, fny);
-                    flows.push_back(refine_flow(flows[0], sx, sy, fnx, fny));
-                    i = g.nx; // exit loops
-                    break;
+        for(size_t lvl = 0; lvl < amr.levels.size(); ++lvl){
+            Grid& g = flows[lvl].rho;
+            bool refined = false;
+            for(int i = 1; i < g.nx-1 && !refined; ++i){
+                for(int j = 1; j < g.ny-1; ++j){
+                    if(amr.needs_refinement(g, i, j, 0.5)){
+                        int fnx = g.nx/2;
+                        int fny = g.ny/2;
+                        int sx  = std::max(0, i - fnx/4);
+                        int sy  = std::max(0, j - fny/4);
+                        amr.refine(lvl, sx, sy, fnx, fny);
+                        flows.push_back(refine_flow(flows[lvl], sx, sy, fnx, fny));
+                        refined = true; // only one refinement per call
+                        break;
+                    }
                 }
             }
+            if(refined) break; // stop after refining one level per call
         }
     }
 

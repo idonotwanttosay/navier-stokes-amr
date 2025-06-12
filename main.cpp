@@ -28,7 +28,7 @@ int main(){
 
     std::string out_dir = prepare_output_dir();
 
-    AMRGrid amr(nx,ny,Lx,Ly,1);
+    AMRGrid amr(nx,ny,Lx,Ly,3); // allow up to 3 refinement levels
     std::vector<FlowField> flows;
     flows.emplace_back(nx,ny,dx,dy);
     initialize_MHD_disk(flows[0]); // deterministic seed default
