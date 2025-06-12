@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from matplotlib.patches import Rectangle
 
 import postprocess as pp
 
@@ -19,17 +18,7 @@ def update(step):
     ax.clear()
     rho = pp.load_field("rho", step, xs, ys)
     c = ax.contourf(X, Y, rho, levels=40, cmap="viridis")
-    grid_file = f"Result/grid_{step}.csv"
-    try:
-        data = np.loadtxt(grid_file, delimiter=",")
-        if data.ndim == 1:
-            data = data[None, :]
-        for lvl, x0, y0, dx, dy, nx, ny in data:
-            rect = Rectangle((x0, y0), dx * (nx - 1), dy * (ny - 1),
-                             fill=False, edgecolor="red", lw=1)
-            ax.add_patch(rect)
-    except OSError:
-        pass
+    # skip drawing AMR grid overlays
     ax.set_title(f"step {step}")
     ax.set_aspect("equal")
     return c.collections

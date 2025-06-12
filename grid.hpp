@@ -4,7 +4,7 @@
 #include <string>
 
 // Maximum number of AMR patches allowed in a single run
-constexpr int MAX_REFINEMENTS = 5;
+constexpr int MAX_REFINEMENTS = 1;  // limit to a single refinement
 extern int refinement_count;
 
 /**
