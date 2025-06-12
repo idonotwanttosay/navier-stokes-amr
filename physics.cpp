@@ -35,3 +35,18 @@ void initialize_MHD_disk(FlowField& flow,int seed)
             flow.psi.data[i][j]=0.0;
         }
 }
+// new part for physics.cpp
+void add_divergence_error(FlowField& flow, double amplitude) {
+    // Add artificial divergence to test GLM
+    #pragma omp parallel for collapse(2)
+    for (int i = 1; i < flow.bx.nx-1; ++i) {
+        for (int j = 1; j < flow.bx.ny-1; ++j) {
+            double x = flow.bx.x0 + i * flow.bx.dx - 0.5;
+            double y = flow.bx.y0 + j * flow.bx.dy - 0.5;
+            
+            // Add divergent perturbation
+            flow.bx.data[i][j] += amplitude * x * exp(-(x*x + y*y)/0.1);
+            flow.by.data[i][j] += amplitude * y * exp(-(x*x + y*y)/0.1);
+        }
+    }
+}
