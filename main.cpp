@@ -36,15 +36,8 @@ int main(){
 
     auto t0=std::chrono::high_resolution_clock::now();
     for(int step=0; step<=max_steps; ++step){
-        double max_speed=0.0;
-#pragma omp parallel for reduction(max:max_speed)
-        for(int i=0;i<nx;++i)
-            for(int j=0;j<ny;++j){
-                double cs=std::sqrt(1.4*flows[0].p.data[i][j]/flows[0].rho.data[i][j]);
-                double spd=std::abs(flows[0].u.data[i][j])+std::abs(flows[0].v.data[i][j])+cs;
-                max_speed=std::max(max_speed,spd);
-            }
-        double dt=0.4*std::min(dx,dy)/(max_speed+1e-12);
+        // Use dynamic CFL-based timestep from the current flow state
+        double dt = compute_cfl_timestep(flows[0]);
 
         solve_MHD(amr,flows,dt,nu,0,0.0);
 

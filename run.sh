@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 mkdir -p build
-g++-14 -O3 -fopenmp *.cpp -o ns2d
+# Use the available compiler
+g++ -O3 -fopenmp *.cpp -o ns2d
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-4}
 ./ns2d
 
