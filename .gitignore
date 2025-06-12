@@ -13,3 +13,12 @@ output_new.txt
 *.swp
 *.swo
 *.bak
+
+# Build directories
+build/
+
+# Results directory
+Result/
+
+# Additional executables
+ns2d
