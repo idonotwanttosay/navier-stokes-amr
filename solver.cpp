@@ -8,7 +8,7 @@
 
 static constexpr double ETA = 0.01;    // Magnetic diffusivity
 static constexpr double CH = 1.0;      // GLM wave speed
-static constexpr double CR = 0.18;     // GLM damping coefficient (improved value)
+static constexpr double CR = 0.018;     // GLM damping coefficient (improved value)
 static constexpr double gamma_gas = 1.4;
 
 // Helper function: compute Laplacian
@@ -444,7 +444,12 @@ static void update_level(FlowField& flow,double dt,double nu){
             }
             
             // GLM source term: exponential decay
-            psi_new[i][j] *= exp(-CH * dt / CR);
+            double divB_new = 0.0;
+            if( i>0 && i<grid.nx-1 && j > 0 && j < grid.ny-1){
+            divB_new = (bx_new[i+1][j] - bx_new[i-1][j]) / (2*grid.dx)
+                + (by_new[i][j+1] - by_new[i][j-1]) / (2*grid.dy);
+            }
+            psi_new[i][j] -= dt * CH * CH * divB_new;
             
             // Ensure positive density
             rho_new[i][j] = std::max(rho_new[i][j], 1e-10);
