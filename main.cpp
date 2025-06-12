@@ -23,7 +23,7 @@ int main(){
     const int nx=64, ny=64;
     const double Lx=1.0,Ly=1.0, dx=Lx/(nx-1), dy=Ly/(ny-1);
     const double nu=0.01;
-    const int max_steps=300;
+    const int max_steps=1000;
     const int output_every=20;
 
     std::string out_dir = prepare_output_dir();
