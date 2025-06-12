@@ -22,3 +22,13 @@ void save_flow_MHD(const FlowField& flow,const std::string& dir,int step){
     dump_scalar(flow.bx,  prefix+"bx_"+std::to_string(step)+".csv");
     dump_scalar(flow.by,  prefix+"by_"+std::to_string(step)+".csv");
 }
+
+void save_amr_grid(const AMRGrid& amr,const std::string& dir,int step){
+    std::filesystem::create_directory(dir);
+    std::ofstream out(dir + "/grid_" + std::to_string(step) + ".csv");
+    for(size_t lvl=0; lvl<amr.levels.size(); ++lvl){
+        const Grid& g = amr.levels[lvl];
+        out<<lvl<<','<<g.x0<<','<<g.y0<<','<<g.dx<<','<<g.dy<<','
+           <<g.nx<<','<<g.ny<<'\n';
+    }
+}
