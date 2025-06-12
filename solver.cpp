@@ -204,15 +204,34 @@ std::pair<double, double> compute_divergence_errors(const FlowField& flow) {
     return {max_divB, L1_divB};
 }
 
-// Main improved MHD solver function
-void solve_MHD(AMRGrid& amr, FlowField& flow, double dt, double nu, int max_iter, double tol) {
+static FlowField refine_flow(const FlowField& coarse,int start_x,int start_y,int fine_nx,int fine_ny){
+    double fine_dx = coarse.rho.dx/2.0;
+    double fine_dy = coarse.rho.dy/2.0;
+    double x0 = coarse.rho.x0 + start_x*coarse.rho.dx;
+    double y0 = coarse.rho.y0 + start_y*coarse.rho.dy;
+    FlowField fine(fine_nx,fine_ny,fine_dx,fine_dy,x0,y0);
+    #pragma omp parallel for collapse(2)
+    for(int i=0;i<fine_nx;++i)
+        for(int j=0;j<fine_ny;++j){
+            int ci = std::min(start_x+i/2, coarse.rho.nx-1);
+            int cj = std::min(start_y+j/2, coarse.rho.ny-1);
+            fine.rho.data[i][j] = coarse.rho.data[ci][cj];
+            fine.u.data[i][j]   = coarse.u.data[ci][cj];
+            fine.v.data[i][j]   = coarse.v.data[ci][cj];
+            fine.p.data[i][j]   = coarse.p.data[ci][cj];
+            fine.e.data[i][j]   = coarse.e.data[ci][cj];
+            fine.bx.data[i][j]  = coarse.bx.data[ci][cj];
+            fine.by.data[i][j]  = coarse.by.data[ci][cj];
+            fine.psi.data[i][j] = coarse.psi.data[ci][cj];
+        }
+    return fine;
+}
+
+static void update_level(FlowField& flow,double dt,double nu){
     Grid& grid = flow.rho;
-    
-    // Use dynamic CFL timestep
     double dt_cfl = compute_cfl_timestep(flow);
     dt = std::min(dt, dt_cfl);
-    
-    // Temporary arrays
+
     auto rho_new = flow.rho.data;
     auto momx_new = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
     auto momy_new = std::vector<std::vector<double>>(grid.nx, std::vector<double>(grid.ny));
@@ -220,21 +239,17 @@ void solve_MHD(AMRGrid& amr, FlowField& flow, double dt, double nu, int max_iter
     auto bx_new = flow.bx.data;
     auto by_new = flow.by.data;
     auto psi_new = flow.psi.data;
-    
-    // First compute momentum (for HLL solver)
+
     #pragma omp parallel for collapse(2)
-    for (int i = 0; i < grid.nx; ++i) {
+    for (int i = 0; i < grid.nx; ++i)
         for (int j = 0; j < grid.ny; ++j) {
             momx_new[i][j] = flow.rho.data[i][j] * flow.u.data[i][j];
             momy_new[i][j] = flow.rho.data[i][j] * flow.v.data[i][j];
         }
-    }
-    
-    // Update using HLL solver
+
     #pragma omp parallel for collapse(2)
     for (int i = 1; i < grid.nx-1; ++i) {
         for (int j = 1; j < grid.ny-1; ++j) {
-            // Get current state
             double rho = flow.rho.data[i][j];
             double u = flow.u.data[i][j];
             double v = flow.v.data[i][j];
@@ -242,80 +257,72 @@ void solve_MHD(AMRGrid& amr, FlowField& flow, double dt, double nu, int max_iter
             double Bx = flow.bx.data[i][j];
             double By = flow.by.data[i][j];
             double psi = flow.psi.data[i][j];
-            
-            // X direction fluxes
+
             HLLFlux flux_xp = compute_hll_flux_x(
                 rho, u, v, p, Bx, By, psi,
                 flow.rho.data[i+1][j], flow.u.data[i+1][j], flow.v.data[i+1][j],
                 flow.p.data[i+1][j], flow.bx.data[i+1][j], flow.by.data[i+1][j],
                 flow.psi.data[i+1][j]
             );
-            
+
             HLLFlux flux_xm = compute_hll_flux_x(
                 flow.rho.data[i-1][j], flow.u.data[i-1][j], flow.v.data[i-1][j],
                 flow.p.data[i-1][j], flow.bx.data[i-1][j], flow.by.data[i-1][j],
                 flow.psi.data[i-1][j],
                 rho, u, v, p, Bx, By, psi
             );
-            
-            // Y direction fluxes
+
             HLLFlux flux_yp = compute_hll_flux_y(
                 rho, u, v, p, Bx, By, psi,
                 flow.rho.data[i][j+1], flow.u.data[i][j+1], flow.v.data[i][j+1],
                 flow.p.data[i][j+1], flow.bx.data[i][j+1], flow.by.data[i][j+1],
                 flow.psi.data[i][j+1]
             );
-            
+
             HLLFlux flux_ym = compute_hll_flux_y(
                 flow.rho.data[i][j-1], flow.u.data[i][j-1], flow.v.data[i][j-1],
                 flow.p.data[i][j-1], flow.bx.data[i][j-1], flow.by.data[i][j-1],
                 flow.psi.data[i][j-1],
                 rho, u, v, p, Bx, By, psi
             );
-            
-            // Update conserved variables
+
             rho_new[i][j] = rho - dt/grid.dx * (flux_xp.F_rho - flux_xm.F_rho)
                                 - dt/grid.dy * (flux_yp.F_rho - flux_ym.F_rho);
-            
+
             momx_new[i][j] = momx_new[i][j] - dt/grid.dx * (flux_xp.F_momx - flux_xm.F_momx)
                                              - dt/grid.dy * (flux_yp.F_momx - flux_ym.F_momx);
-            
+
             momy_new[i][j] = momy_new[i][j] - dt/grid.dx * (flux_xp.F_momy - flux_xm.F_momy)
                                              - dt/grid.dy * (flux_yp.F_momy - flux_ym.F_momy);
-            
+
             e_new[i][j] = flow.e.data[i][j] - dt/grid.dx * (flux_xp.F_E - flux_xm.F_E)
                                             - dt/grid.dy * (flux_yp.F_E - flux_ym.F_E);
-            
+
             bx_new[i][j] = Bx - dt/grid.dx * (flux_xp.F_Bx - flux_xm.F_Bx)
                               - dt/grid.dy * (flux_yp.F_Bx - flux_ym.F_Bx);
-            
+
             by_new[i][j] = By - dt/grid.dx * (flux_xp.F_By - flux_xm.F_By)
                               - dt/grid.dy * (flux_yp.F_By - flux_ym.F_By);
-            
+
             psi_new[i][j] = psi - dt/grid.dx * (flux_xp.F_psi - flux_xm.F_psi)
                                 - dt/grid.dy * (flux_yp.F_psi - flux_ym.F_psi);
-            
-            // Add viscous terms
+
             if (nu > 0) {
                 momx_new[i][j] += dt * nu * rho * laplacian(flow.u, i, j);
                 momy_new[i][j] += dt * nu * rho * laplacian(flow.v, i, j);
             }
-            
-            // Add magnetic diffusion
+
             if (ETA > 0) {
                 bx_new[i][j] += dt * ETA * laplacian(flow.bx, i, j);
                 by_new[i][j] += dt * ETA * laplacian(flow.by, i, j);
             }
-            
-            // GLM source term: exponential decay
+
             psi_new[i][j] *= exp(-CH * dt / CR);
-            
-            // Ensure positive density
+
             rho_new[i][j] = std::max(rho_new[i][j], 1e-10);
         }
     }
-    
-    // Update primitive variables
+
     #pragma omp parallel for collapse(2)
     for (int i = 1; i < grid.nx-1; ++i) {
         for (int j = 1; j < grid.ny-1; ++j) {
@@ -326,20 +333,17 @@ void solve_MHD(AMRGrid& amr, FlowField& flow, double dt, double nu, int max_iter
             flow.by.data[i][j] = by_new[i][j];
             flow.psi.data[i][j] = psi_new[i][j];
             flow.e.data[i][j] = e_new[i][j];
-            
-            // Update pressure
-            double ke = 0.5 * rho_new[i][j] * (flow.u.data[i][j]*flow.u.data[i][j] + 
+
+            double ke = 0.5 * rho_new[i][j] * (flow.u.data[i][j]*flow.u.data[i][j] +
                                                 flow.v.data[i][j]*flow.v.data[i][j]);
             double me = 0.5 * (bx_new[i][j]*bx_new[i][j] + by_new[i][j]*by_new[i][j]);
             flow.p.data[i][j] = (gamma_gas - 1.0) * (e_new[i][j] - ke - me);
             flow.p.data[i][j] = std::max(flow.p.data[i][j], 1e-10);
         }
     }
-    
-    // Boundary conditions (periodic)
+
     #pragma omp parallel for
     for (int j = 0; j < grid.ny; ++j) {
-        // X direction periodic BC
         flow.rho.data[0][j] = flow.rho.data[grid.nx-2][j];
         flow.rho.data[grid.nx-1][j] = flow.rho.data[1][j];
         flow.u.data[0][j] = flow.u.data[grid.nx-2][j];
@@ -357,10 +361,9 @@ void solve_MHD(AMRGrid& amr, FlowField& flow, double dt, double nu, int max_iter
         flow.psi.data[0][j] = flow.psi.data[grid.nx-2][j];
         flow.psi.data[grid.nx-1][j] = flow.psi.data[1][j];
     }
-    
+
     #pragma omp parallel for
     for (int i = 0; i < grid.nx; ++i) {
-        // Y direction periodic BC
         flow.rho.data[i][0] = flow.rho.data[i][grid.ny-2];
         flow.rho.data[i][grid.ny-1] = flow.rho.data[i][1];
         flow.u.data[i][0] = flow.u.data[i][grid.ny-2];
@@ -380,67 +383,27 @@ void solve_MHD(AMRGrid& amr, FlowField& flow, double dt, double nu, int max_iter
     }
 }
 
-// main_improved.cpp - Improved main program
-#include "solver.hpp"
-#include "physics.hpp"
-#include "io.hpp"
-#include <filesystem>
-#include <chrono>
-#include <iostream>
-#include <iomanip>
-
-// Prepare output directory
-static std::string prepare_output_dir(){
-    namespace fs = std::filesystem;
-    fs::path base("Result");
-    if(fs::exists(base) && !fs::is_empty(base)){
-        auto ts = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-        fs::rename(base, "Result_"+std::to_string(ts));
-    }
-    fs::create_directory(base);
-    return "Result";
-}
-
-// Add to main.cpp
-int main() {
-    const int nx = 128, ny = 128;  // Increase resolution
-    const double Lx = 1.0, Ly = 1.0, dx = Lx/(nx-1), dy = Ly/(ny-1);
-    const double nu = 0.001;  // Reduce viscosity
-    const int max_steps = 1000;
-    const int output_every = 50;
-    
-    std::string out_dir = prepare_output_dir();
-    
-    AMRGrid amr(nx, ny, Lx, Ly, 1);
-    FlowField flow(nx, ny, dx, dy);
-    initialize_MHD_disk(flow);
-    
-    auto t0 = std::chrono::high_resolution_clock::now();
-    
-    for (int step = 0; step <= max_steps; ++step) {
-        // Use improved CFL computation
-        double dt = compute_cfl_timestep(flow, 0.4);
-        
-        // Call improved solver
-        solve_MHD(amr, flow, dt, nu, 0, 0.0);
-        
-        // Compute and output divergence errors
-        if (step % 10 == 0) {
-            auto [max_divB, L1_divB] = compute_divergence_errors(flow);
-            std::cout << "Step " << std::setw(4) << step 
-                     << " dt=" << std::scientific << std::setprecision(3) << dt
-                     << " max|div B|=" << max_divB 
-                     << " L1|div B|=" << L1_divB << std::endl;
-        }
-        
-        if (step % output_every == 0) {
-            save_flow_MHD(flow, out_dir, step);
+void solve_MHD(AMRGrid& amr, std::vector<FlowField>& flows, double dt, double nu, int, double){
+    if(amr.levels.size()==flows.size()){
+        Grid& g = flows[0].rho;
+        for(int i=1;i<g.nx-1;++i){
+            for(int j=1;j<g.ny-1;++j){
+                if(amr.needs_refinement(g,i,j,0.5)){
+                    int fnx=g.nx/2;
+                    int fny=g.ny/2;
+                    int sx=std::max(0,i-fnx/4);
+                    int sy=std::max(0,j-fny/4);
+                    amr.refine(0,sx,sy,fnx,fny);
+                    flows.push_back(refine_flow(flows[0],sx,sy,fnx,fny));
+                    i=g.nx; break;
+                }
+            }
         }
     }
-    
-    auto t1 = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = t1 - t0;
-    std::cout << "Total time " << elapsed.count() << " s\n";
-    
-    return 0;
+
+    for(auto& f: flows){
+        update_level(f,dt,nu);
+    }
 }
+
+

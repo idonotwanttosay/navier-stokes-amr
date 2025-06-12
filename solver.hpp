@@ -1,3 +1,4 @@
 #pragma once
 #include "grid.hpp"
-void solve_MHD(AMRGrid& amr, FlowField& flow,double dt,double nu,int max_iter,double tol);
+#include <vector>
+void solve_MHD(AMRGrid& amr, std::vector<FlowField>& flows,double dt,double nu,int max_iter,double tol);

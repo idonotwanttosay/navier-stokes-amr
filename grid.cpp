@@ -52,7 +52,10 @@ bool AMRGrid::needs_refinement(const Grid& g,int i,int j,double thres){
     return (gx+gy)>thres;
 }
 
-FlowField::FlowField(int nx,int ny,double dx,double dy)
-    : rho(nx,ny,dx,dy), u(nx,ny,dx,dy), v(nx,ny,dx,dy),
-      p(nx,ny,dx,dy), e(nx,ny,dx,dy),
-      bx(nx,ny,dx,dy), by(nx,ny,dx,dy), psi(nx,ny,dx,dy) {}
+FlowField::FlowField(int nx,int ny,double dx,double dy,double x0,double y0)
+    : rho(nx,ny,dx,dy,x0,y0), u(nx,ny,dx,dy,x0,y0), v(nx,ny,dx,dy,x0,y0),
+      p(nx,ny,dx,dy,x0,y0), e(nx,ny,dx,dy,x0,y0),
+      bx(nx,ny,dx,dy,x0,y0), by(nx,ny,dx,dy,x0,y0), psi(nx,ny,dx,dy,x0,y0) {}
+
+FlowField::FlowField(const Grid& g)
+    : FlowField(g.nx,g.ny,g.dx,g.dy,g.x0,g.y0) {}
